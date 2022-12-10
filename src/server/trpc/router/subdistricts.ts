@@ -10,22 +10,9 @@ export const subdistrictRouter = router({
         1
       )}`;
       return ctx.prisma.subdistricts.findMany({
-        take: 10,
         select: {
           id: true,
           name: true,
-          city: {
-            select: {
-              id: true,
-              name: true,
-              province: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-            },
-          },
         },
         where: {
           OR: [
@@ -35,23 +22,18 @@ export const subdistrictRouter = router({
               },
             },
             {
-              city: {
-                name: {
-                  contains: capitalQuery,
-                },
+              cityName: {
+                contains: capitalQuery,
               },
             },
             {
-              city: {
-                province: {
-                  name: {
-                    contains: capitalQuery,
-                  },
-                },
+              provinceName: {
+                contains: capitalQuery,
               },
             },
           ],
         },
+        take: 10,
       });
     }),
 });

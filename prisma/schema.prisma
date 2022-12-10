@@ -8,40 +8,18 @@ datasource db {
   relationMode = "prisma"
 }
 
-model Provinces {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-  name      String   @db.VarChar(256)
-  cities    Cities[]
-
-  @@unique([id, name])
-  @@index([id, name])
-}
-
-model Cities {
-  id           Int            @id @default(autoincrement())
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @default(now())
-  name         String         @db.VarChar(256)
-  province     Provinces      @relation(fields: [provinceId], references: [id], onDelete: Cascade)
-  type         String
-  provinceId   Int
-  subdistructs Subdistricts[]
-
-  @@unique([id, name])
-  @@index([provinceId, name])
-}
-
 model Subdistricts {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-  name      String   @db.VarChar(256)
-  city      Cities   @relation(fields: [cityId], references: [id], onDelete: Cascade)
-  cityId    Int
+  id           Int      @id @default(autoincrement())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())
+  name         String   @db.VarChar(100)
+  cityId       Int
+  cityName     String   @db.VarChar(100)
+  provinceId   Int
+  type         String   @db.VarChar(20)
+  provinceName String   @db.VarChar(100)
 
-  @@index([cityId, name])
+  @@index([name, cityName, provinceName])
 }
 
 model CourierCosts {
@@ -58,7 +36,7 @@ model CourierCosts {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @default(now())
 
-  @@index([courierCode, destinationtId, originId])
+  @@index([destinationtId, originId])
 }
 
 enum CourierCode {
