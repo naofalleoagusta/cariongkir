@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["extendedWhereUnique"]
 }
 
 datasource db {
@@ -27,16 +28,16 @@ model CourierCosts {
   courierCode        CourierCode
   courierName        String      @db.VarChar(100)
   originId           Int
-  destinationtId     Int
+  destinationId      Int
   serviceName        String      @db.VarChar(100)
   serviceDescription String      @db.VarChar(256)
   cost               Float
-  estimatedDuration  String      @db.VarChar(24)
+  estimatedDuration  String      @db.VarChar(100)
   minWeight          Int
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @default(now())
 
-  @@index([destinationtId, originId])
+  @@index([destinationId, originId, courierCode, serviceName])
 }
 
 enum CourierCode {
@@ -50,4 +51,5 @@ enum CourierCode {
   star
   sicepat
   anteraja
+  ninja
 }

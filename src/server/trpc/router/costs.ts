@@ -2,12 +2,14 @@ import { z } from "zod";
 
 import { router, publicProcedure } from "../trpc";
 
+import { courierCodes } from "@/constants";
+
 import { type GetCostRajaOngkirRes } from "@/server/common/get-cost-raja-ongkir";
-import { type CourierCode, type CourierCosts } from "@prisma/client";
+import { type CourierCosts } from "@prisma/client";
 
-const ONE_DAY = 86400000; // in millisecond
+const SEVEN_DAY = 604800000; // in millisecond
 
-const paramSchema = z.object({
+const getCostParamSchema = z.object({
   origin: z.number(),
   destination: z.number(),
   weight: z.number(),
@@ -16,139 +18,159 @@ const paramSchema = z.object({
   h: z.number().nullish(),
 });
 
-const courierCodes: CourierCode[] = [
-  "anteraja",
-  "indah",
-  "jne",
-  "jnt",
-  "pos",
-  "rpx",
-  "sap",
-  "sicepat",
-  "star",
-  "tiki",
-];
-
 export const costsRouter = router({
-  getCosts: publicProcedure.input(paramSchema).query(({ ctx, input }) => {
-    let weight: number = input.weight;
-    if (input.w && input.h && input.l) {
-      const volume = (input.w * input.h * input.l) / 6;
-      if (volume > weight) {
-        weight = volume;
-      }
-    }
-    let roundedWeight = weight / 1000;
-    const baseWeight = Math.floor(weight / 1000);
-    const floorBaseWeight = baseWeight === 0 ? 0 : baseWeight + 0.31;
-    const upperBaseWeight = floorBaseWeight + 1;
-    if (!baseWeight) {
-      roundedWeight = 1;
-    }
-    if (roundedWeight < floorBaseWeight) {
-      roundedWeight = Math.floor(floorBaseWeight);
-    } else {
-      roundedWeight = Math.floor(upperBaseWeight);
-    }
-    roundedWeight *= 1000;
-    const courierCosts = ctx.prisma.courierCosts.findMany({
-      where: {
-        AND: [
-          { destinationtId: input.destination },
-          {
-            originId: input.origin,
-          },
-        ],
-      },
-      orderBy: {
-        cost: "asc",
-      },
-    });
-    return courierCosts.then((res) => {
-      if (
-        !!res.length &&
-        Date.now() - new Date(res?.[0]?.updatedAt || "").getTime() < ONE_DAY
-      ) {
-        return res.reduce(
-          (courierCostsRes: CourierCosts[], dtCost: CourierCosts) => {
-            if (
-              dtCost.minWeight === 1000 ||
-              (dtCost.minWeight > 1000 && dtCost.minWeight <= roundedWeight)
-            ) {
-              courierCostsRes.push({
-                ...dtCost,
-                cost: (roundedWeight / dtCost.minWeight) * dtCost.cost,
-              });
-            }
-            return courierCostsRes;
-          },
-          []
-        );
-      }
-      const promises: Promise<GetCostRajaOngkirRes>[] = courierCodes.map(
-        (code) => {
-          return ctx.getCourierCost({
-            courier: code,
-            destination: input.destination,
-            origin: input.origin,
-            weight: 1000,
-          });
+  getCosts: publicProcedure
+    .input(getCostParamSchema)
+    .query(({ ctx, input }) => {
+      let weight: number = input.weight;
+      if (input.w && input.h && input.l) {
+        const volume = (input.w * input.h * input.l) / 6;
+        if (volume > weight) {
+          weight = volume;
         }
-      );
-
-      return Promise.all(promises).then((dtCosts) => {
-        const tempCosts: CourierCosts[] = [];
-        for (const dtCost of dtCosts) {
-          for (const resCost of dtCost.rajaongkir.results) {
-            for (const shippingService of resCost.costs) {
-              if ((resCost.code as string) === "J&T") {
-                resCost.code = "jnt";
+      }
+      let roundedWeight = weight / 1000;
+      const baseWeight = Math.floor(weight / 1000);
+      const floorBaseWeight = baseWeight === 0 ? 0 : baseWeight + 0.31;
+      const upperBaseWeight = floorBaseWeight + 1;
+      if (!baseWeight) {
+        roundedWeight = 1;
+      }
+      if (roundedWeight < floorBaseWeight) {
+        roundedWeight = Math.floor(floorBaseWeight);
+      } else {
+        roundedWeight = Math.floor(upperBaseWeight);
+      }
+      roundedWeight *= 1000;
+      const courierCosts = ctx.prisma.courierCosts.findMany({
+        where: {
+          AND: [
+            { destinationId: input.destination },
+            {
+              originId: input.origin,
+            },
+          ],
+        },
+        orderBy: {
+          cost: "asc",
+        },
+      });
+      return courierCosts.then((res) => {
+        if (
+          !!res.length &&
+          Date.now() - new Date(res?.[0]?.updatedAt || "").getTime() < SEVEN_DAY
+        ) {
+          return res.reduce(
+            (courierCostsRes: CourierCosts[], dtCost: CourierCosts) => {
+              if (
+                dtCost.minWeight === 1000 ||
+                (dtCost.minWeight > 1000 && dtCost.minWeight <= roundedWeight)
+              ) {
+                courierCostsRes.push({
+                  ...dtCost,
+                  cost: (roundedWeight / dtCost.minWeight) * dtCost.cost,
+                });
               }
-              const tempCost: CourierCosts = {
-                cost: shippingService.cost[0]?.value || 0,
-                courierCode: resCost.code,
-                courierName: resCost.name,
-                serviceName: shippingService.service,
-                serviceDescription: shippingService.description,
-                id: undefined as any,
-                minWeight:
-                  shippingService.description.toLowerCase().includes("cargo") ||
-                  shippingService.description.toLowerCase().includes("kargo")
-                    ? 10000
-                    : 1000,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                originId: input.origin,
-                destinationtId: input.destination,
-                estimatedDuration: shippingService.cost[0]?.etd || "",
-              };
-              tempCosts.push(tempCost);
-            }
-          }
+              return courierCostsRes;
+            },
+            []
+          );
         }
+        const promises: Promise<GetCostRajaOngkirRes>[] = courierCodes.map(
+          (code) => {
+            return ctx.getCourierCost({
+              courier: code,
+              destination: input.destination,
+              origin: input.origin,
+              weight: 1000,
+            });
+          }
+        );
 
-        return ctx.prisma.courierCosts
-          .createMany({
-            data: tempCosts,
-          })
-          .then(() => {
-            return tempCosts.reduce(
-              (courierCostsRes: CourierCosts[], dtCost: CourierCosts) => {
+        return Promise.all(promises).then((dtCosts) => {
+          const tempCosts: CourierCosts[] = [];
+          const prismaPromises = [];
+          for (const dtCost of dtCosts) {
+            for (const resCost of dtCost.rajaongkir.results) {
+              for (const shippingService of resCost.costs) {
+                if ((resCost.code as string) === "J&T") {
+                  resCost.code = "jnt";
+                }
+                const tempCost: CourierCosts = {
+                  cost: shippingService.cost[0]?.value || 0,
+                  courierCode: resCost.code,
+                  courierName: resCost.name,
+                  serviceName: shippingService.service,
+                  serviceDescription: shippingService.description,
+                  id: undefined as any,
+                  minWeight: getMinWeight(
+                    shippingService.description,
+                    resCost.code
+                  ),
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                  originId: input.origin,
+                  destinationId: input.destination,
+                  estimatedDuration: shippingService.cost[0]?.etd || "",
+                };
+                if (!!res.length) {
+                  prismaPromises.push(
+                    ctx.prisma.courierCosts.updateMany({
+                      where: {
+                        AND: [
+                          { courierCode: tempCost.courierCode },
+                          {
+                            destinationId: tempCost.destinationId,
+                          },
+                          { originId: tempCost.originId },
+                          { serviceName: tempCost.serviceName },
+                        ],
+                      },
+                      data: {
+                        cost: tempCost.cost,
+                      },
+                    })
+                  );
+                } else {
+                  prismaPromises.push(
+                    ctx.prisma.courierCosts.create({ data: tempCost })
+                  );
+                }
+
                 if (
-                  dtCost.minWeight === 1000 ||
-                  (dtCost.minWeight > 1000 && dtCost.minWeight <= roundedWeight)
+                  tempCost.minWeight === 1000 ||
+                  (tempCost.minWeight > 1000 &&
+                    tempCost.minWeight <= roundedWeight)
                 ) {
-                  courierCostsRes.push({
-                    ...dtCost,
-                    cost: (roundedWeight / dtCost.minWeight) * dtCost.cost,
+                  tempCosts.push({
+                    ...tempCost,
+                    cost: (roundedWeight / tempCost.minWeight) * tempCost.cost,
                   });
                 }
-                return courierCostsRes;
-              },
-              []
-            );
+              }
+            }
+          }
+          return Promise.all(prismaPromises).then(() => {
+            return tempCosts;
           });
+        });
       });
-    });
-  }),
+    }),
 });
+
+const getMinWeight = (desc: string, courierCode: string) => {
+  const matchNumber = desc.match(/\d+/g);
+  if (matchNumber) {
+    return parseInt(matchNumber[0]) * 1000;
+  }
+  if (
+    desc.toLowerCase().includes("cargo") ||
+    desc.toLowerCase().includes("kargo")
+  ) {
+    return 10000;
+  }
+  if (courierCode === "star") {
+    return 50000;
+  }
+  return 1000;
+};

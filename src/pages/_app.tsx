@@ -24,7 +24,9 @@ const MyApp: AppType<{ session: Session | null }> = ({
         }
       `}</style>
       <Navbar />
-      <Component {...pageProps} />
+      <main className="mx-auto h-full px-4 md:max-w-full lg:max-w-screen-xl">
+        <Component {...pageProps} />
+      </main>
     </SessionProvider>
   );
 };
